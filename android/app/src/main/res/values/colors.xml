@@ -1,0 +1,5 @@
+<resources>
+    <color name="splash_background">#f3d3af</color> <!-- Change this to your preferred color -->
+    <color name="notification_bg">#f3d3af</color> <!-- Change this to your preferred color -->
+
+</resources>
