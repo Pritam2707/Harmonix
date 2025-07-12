@@ -1,97 +1,141 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
-# Getting Started
+# 🎶 Harmonix — Music Streaming App (Educational Use Only)
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+**Harmonix** is a smart, feature-rich **music streaming app** built with **React Native** and **Chaquopy**, powered by **ytmusicapi** and **yt-dlp**. It mimics core features of YouTube Music including streaming, autoplay, lyrics, downloads, artist following, and more — for **educational purposes only**.
 
-## Step 1: Start Metro
+> ⚠️ This app is created **strictly for educational and personal learning use**.  
+> It uses **unofficial APIs** and **YouTube Music content**, and is **not for commercial or public distribution**.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## 🎵 Features
 
-```sh
-# Using npm
-npm start
+- 🎧 **Stream any song** from YouTube Music
+- 📝 **Synchronized lyrics** (karaoke-style scrolling)
+- 📚 **Full metadata**: title, artist, album, genre, duration
+- 🔁 **Autoplay mode ("Watchlist")**: plays similar songs automatically
+- 📥 **Download songs** for offline listening
+- 📤 **Share tracks** with others
+- ➕ **Create, update, delete playlists**
+- ❤️ **Follow/unfollow artists**
+- 🔍 **Search** for songs, albums, or artists
+- 🚀 **Discover tab** with charts and new music
+- 🕘 **Listening history**
+- 🔗 **Open and play YouTube Music links**
 
-# OR using Yarn
-yarn start
+
+## 🧱 Tech Stack
+
+| Technology        | Purpose                              |
+|-------------------|---------------------------------------|
+| **React Native**  | UI and core logic                     |
+| **Material UI**   | Cross-platform component styling      |
+| **Chaquopy**      | Python-in-Android integration         |
+| **ytmusicapi**    | Song metadata, lyrics, related tracks |
+| **yt-dlp**        | Streaming and downloading audio       |
+| **AsyncStorage** | Local storage for history, playlists |
+
+
+## 🔁 What Is "Watchlist"?
+
+In Harmonix, **Watchlist** is an **autoplay system**, not a manual list.
+
+- After each song finishes, Harmonix fetches a **queue of similar songs** using `ytmusicapi.get_watch_playlist()`
+- The app continues playback **seamlessly** without manual interaction
+- Works like YouTube Music’s **Autoplay Radio**
+
+
+
+
+## ⚙️ Setup Instructions
+
+### 1. Clone the Repository
+
 ```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+git clone https://github.com/your-username/harmonix.git
+cd harmonix
 ```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+2. Install JavaScript Dependencies
 ```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
+npm install
 ```
+3. Configure Chaquopy (Python Dependencies)
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+In android/build.gradle:
 
-```sh
-# Using npm
-npm run ios
+python {
+    pip {
+        install "ytmusicapi"
+        install "yt-dlp"
+    }
+}
 
-# OR using Yarn
-yarn ios
-```
+4. Add Required Android Permissions
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+In android/app/src/main/AndroidManifest.xml:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
-## Step 3: Modify your app
 
-Now that you have successfully run the app, let's make changes!
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+🔗 YouTube Music Link Integration
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+Harmonix can parse and open direct YouTube Music links:
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+https://music.youtube.com/watch?v=...
 
-## Congratulations! :tada:
+When opened, Harmonix extracts song IDs, fetches metadata, and plays the song.
 
-You've successfully run and modified your React Native App. :partying_face:
 
-### Now what?
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+📥 Downloads & Offline Access
 
-# Troubleshooting
+Songs can be downloaded using yt-dlp
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+Saved in device storage
 
-# Learn More
+Includes metadata for offline playback
 
-To learn more about React Native, take a look at the following resources:
+Downloaded tracks show up in the Downloads tab
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+
+
+🔊 Playback Engine
+
+Streamed audio via URLs provided by yt-dlp
+
+Played using react native track player
+
+Includes lyrics display with timing from ytmusicapi
+
+
+
+⚠️ Legal Notice
+
+This project uses unofficial YouTube Music APIs:
+
+❌ Not affiliated with YouTube or Google
+
+❌ Not licensed for distribution or resale
+
+✅ Intended only for learning, personal, and non-commercial use
+
+
+> Do not upload Harmonix to any app store or distribute APKs.
+
+
+
+
+---
+
+📜 License
+
+Source code is licensed under the MIT License.
+Use of YouTube Music content must comply with YouTube’s Terms of Service.
+
+
+
+
+Feedback and pull requests welcome for educational improvements.
+
