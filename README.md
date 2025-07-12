@@ -109,7 +109,12 @@ Played using react native track player
 
 Includes lyrics display with timing from ytmusicapi
 
+📸 App Screenshots
+<p align="center"> <img src="preview/Screenshot_20250712_181258.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181620.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181245.jpg" width="30%" /> </p> <p align="center"> <img src="preview/Screenshot_20250712_181240.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181306.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181220.jpg" width="30%" /> </p>
 
+<p align="center"> <img src="preview/Screenshot_20250712_181312.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181334.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181346.jpg" width="30%" /> </p> <p align="center"> <img src="preview/Screenshot_20250712_181430.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181441.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181444.jpg" width="30%" /> </p>
+
+<p align="center"> <img src="preview/Screenshot_20250712_181500.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181503.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181516.jpg" width="30%" /> </p> <p align="center"> <img src="preview/Screenshot_20250712_181533.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181541.jpg" width="30%" /> <img src="preview/Screenshot_20250712_181614.jpg" width="30%" /> </p>
 
 ⚠️ Legal Notice
 
