@@ -9,23 +9,15 @@ import {
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
-
+import { Track } from "services/MusicPlayerService";
 export default function WatchPlaylist() {
-    const { playlist, currentIndex, skipToIndex } = useMusicPlayer();
+    const { skipToIndex, queue, activeIndex } = useMusicPlayer();
     const { colors } = useTheme();
-
-    const [activeIndex, setActiveIndex] = useState<number>(currentIndex);
-
-    useEffect(() => {
-        setActiveIndex(currentIndex);
-    }, [currentIndex]);
-
     const handleSongPress = (index: number) => {
-        // setActiveIndex(index);
         skipToIndex(index)
     };
 
-    const renderItem = ({ item, index }: { item: any; index: number }) => (
+    const renderItem = ({ item, index }: { item: Track; index: number }) => (
         <TouchableOpacity
             onPress={() => handleSongPress(index)}
             style={[
@@ -34,7 +26,7 @@ export default function WatchPlaylist() {
             ]}
         >
             <Image
-                source={{ uri: item.thumbnail[item.thumbnail.length - 1].url }}
+                source={{ uri: item?.artwork }}
                 style={styles(colors).thumbnail}
             />
             <View style={styles(colors).textContainer}>
@@ -42,7 +34,7 @@ export default function WatchPlaylist() {
                     {item.title}
                 </Text>
                 <Text style={styles(colors).songArtists} numberOfLines={1}>
-                    {item.artists?.map?.((a: any) => a.name).join(", ") || ""}
+                    {item.artist}
                 </Text>
             </View>
         </TouchableOpacity>
@@ -52,9 +44,9 @@ export default function WatchPlaylist() {
         <View style={styles(colors).container}>
             <Text style={styles(colors).header}>Upcoming</Text>
             <FlatList
-                data={playlist}
+                data={queue}
                 renderItem={renderItem}
-                keyExtractor={(item) => item.videoId}
+                keyExtractor={(item) => item.id}
                 extraData={activeIndex}
                 contentContainerStyle={{ paddingBottom: 24 }}
             />

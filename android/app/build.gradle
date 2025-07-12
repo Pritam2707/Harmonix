@@ -15,28 +15,33 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     ndkVersion rootProject.ext.ndkVersion
-
     defaultConfig {
         applicationId "com.harmonix"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
-
+        versionCode = 4
+        versionName = "1.0.4"
         ndk {
-            abiFilters "arm64-v8a"
+              abiFilters "arm64-v8a"
         }
 
-        python {
-             version = "3.10"
-            // Set the Python 3.8+ path for Chaquopy
-            buildPython 'C:\\Users\\Pritam\\.pyenv\\pyenv-win\\versions\\3.10.0\\python.exe'
-            pip {
-                install "requests"
-                 install "ytmusicapi>=1.10.0"
-                install "yt_dlp"
-            }
+      python {
+        version = "3.10"
+        buildPython "C:\\Users\\Pritam\\.pyenv\\pyenv-win\\versions\\3.10.0\\python.exe"
+    
+        pip {
+            install "ytmusicapi>=1.10.0"
+            install "yt-dlp" 
+            install "requests" 
+            install "urllib3" 
         }
+    
+        // staticStdlib true
+        // pyc {
+        // optimize = 2  // equivalent to `python -OO`, strips docstrings
+        // src = false   // don’t include .py source files in the APK
+        // }
+    }
     }
 
  signingConfigs {
@@ -55,6 +60,10 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    packagingOptions {
+        exclude "lib/armeabi/**"
+        exclude "lib/x86/**"
     }
 }
 

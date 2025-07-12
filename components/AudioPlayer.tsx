@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import TrackPlayer, { Event, State, usePlaybackState, useProgress } from "react-native-track-player";
+import TrackPlayer, { useActiveTrack, State, usePlaybackState, useProgress, isPlaying } from "react-native-track-player";
 import { useTheme, MD3Theme } from "react-native-paper";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useNavigation } from "@react-navigation/native";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
+import { onRemoteNext, onRemotePrevious } from "../services/PlaybackService";
+import { Track } from "services/MusicPlayerService";
 // Memoized formatter to prevent unnecessary re-creations
 const formatTime = (seconds: number) => {
     if (!seconds || isNaN(seconds) || !isFinite(seconds)) return "--:--";
@@ -85,7 +87,8 @@ export default function AudioPlayer() {
     const playbackState = usePlaybackState();
     const { position, duration } = useProgress();
 
-    const { currentTrack, stop, loading } = useMusicPlayer();
+    const { stop, loading, isMiniPlayerVisible, setIsMiniPlayerVisible, isActive } = useMusicPlayer();
+    const currentTrack = useActiveTrack() as Track | undefined
     // State management
     const [volume, setVolume] = useState(1);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -95,13 +98,13 @@ export default function AudioPlayer() {
 
     const playNextSong = async () => {
         try {
-            await TrackPlayer.skipToNext();
+            onRemoteNext()
         } catch { }
     };
 
     const playPreviousSong = async () => {
         try {
-            await TrackPlayer.skipToPrevious();
+            onRemotePrevious()
         } catch { }
     }
     const StopMusicPlayback = () => {
@@ -110,10 +113,10 @@ export default function AudioPlayer() {
 
     // Memoized track details to prevent unnecessary re-renders
     const trackDetails = useMemo(() => ({
-        title: currentTrack?.videoDetails.title || "Loading...",
-        artist: currentTrack?.videoDetails.author || "Unknown",
-        thumbnail: currentTrack?.videoDetails.thumbnail.thumbnails[currentTrack?.videoDetails.thumbnail.thumbnails.length - 1].url || "https://via.placeholder.com/60",
-        id: currentTrack?.videoDetails.videoId
+        title: currentTrack?.title || "Loading...",
+        artist: currentTrack?.artist || "Unknown",
+        thumbnail: currentTrack?.artwork || "https://via.placeholder.com/60",
+        id: currentTrack?.id
     }), [currentTrack]);
 
     // Animation effects
@@ -173,16 +176,12 @@ export default function AudioPlayer() {
     }, []);
 
     const navigateToDetails = useCallback(() => {
-        if (!loading && trackDetails.id) {
-            navigation.navigate("SongDetails", { videoId: trackDetails.id });
-        }
+        setIsMiniPlayerVisible(false)
+        navigation.navigate("SongScreen");
+
     }, [trackDetails.id, loading]);
 
-    const navigateToWatchPlaylist = useCallback(() => {
-        if (!loading && trackDetails.id) {
-            navigation.navigate("WatchPlaylist");
-        }
-    }, [trackDetails.id, loading]);
+
 
     const togglePlayback = useCallback(async () => {
         if (playbackState.state === State.Playing) {
@@ -204,8 +203,10 @@ export default function AudioPlayer() {
             </PlayerContainer>
         );
     }
+    if (!isMiniPlayerVisible) return null;
 
-    if (!currentTrack && !loading) return null;
+    if (!isActive && !loading) return null;
+
 
     return (
         <PlayerContainer
@@ -213,87 +214,116 @@ export default function AudioPlayer() {
             translateY={translateY}
             panHandlers={panResponder.panHandlers}
         >
-            <TouchableOpacity onPress={navigateToDetails} activeOpacity={0.7}>
+            <TouchableOpacity
+                activeOpacity={1}
+                onPress={navigateToDetails}
+                style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+            >
                 <Image
                     source={{ uri: trackDetails.thumbnail }}
                     style={styles.thumbnail}
                 />
-            </TouchableOpacity>
 
-            <View style={styles.trackInfo}>
-                <TouchableOpacity onPress={navigateToWatchPlaylist} activeOpacity={0.7}>
+                <View style={styles.trackInfo}>
+                    {/* <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={(e) => {
+                            // e.stopPropagation();
+                            // navigateToWatchPlaylist();
+                        }}
+                    > */}
                     <Text
                         style={[styles.title, { color: theme.colors.onSurface }]}
                         numberOfLines={1}
                     >
                         {trackDetails.title}
                     </Text>
-                    <Text style={[styles.artist, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
+                    <Text
+                        style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
+                        numberOfLines={1}
+                    >
                         {trackDetails.artist}
                     </Text>
-                </TouchableOpacity>
+                    {/* </TouchableOpacity> */}
 
+                    <SeekBar
+                        duration={duration}
+                        seekPosition={seekPosition}
+                        isSeeking={isSeeking}
+                        onValueChange={setSeekPosition}
+                        onSeekStart={() => setIsSeeking(true)}
+                        onSeekComplete={handleSeekComplete}
+                        theme={theme}
+                    />
 
-                <SeekBar
-                    duration={duration}
-                    seekPosition={seekPosition}
-                    isSeeking={isSeeking}
-                    onValueChange={setSeekPosition}
-                    onSeekStart={() => setIsSeeking(true)}
-                    onSeekComplete={handleSeekComplete}
+                    <TimeDisplay
+                        position={seekPosition}
+                        duration={duration}
+                        theme={theme}
+                    />
+                </View>
+
+                <View
+                    style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 10,
+                        marginLeft: 5,
+                    }}
+                    // Prevent touch from bubbling up
+                    onStartShouldSetResponder={() => true}
+                >
+                    <PlayerControls
+                        onPrevious={playPreviousSong}
+                        onNext={playNextSong}
+                        onTogglePlayback={togglePlayback}
+                        playbackState={playbackState.state as State}
+                        theme={theme}
+                    />
+                </View>
+
+                <VolumeControl
+                    volume={volume}
+                    onVolumeChange={handleVolumeChange}
                     theme={theme}
                 />
+            </TouchableOpacity>
 
-                <TimeDisplay
-                    position={seekPosition}
-                    duration={duration}
-                    theme={theme}
-                />
-            </View>
-
-            <PlayerControls
-                onPrevious={playPreviousSong}
-                onNext={playNextSong}
-                onTogglePlayback={togglePlayback}
-                playbackState={playbackState.state as State}
-                theme={theme}
-            />
-
-            <VolumeControl
-                volume={volume}
-                onVolumeChange={handleVolumeChange}
-                theme={theme}
-            />
         </PlayerContainer>
     );
+
+
 }
 
 // Extracted components for better readability and performance
 
-const PlayerContainer: React.FC<PlayerContainerProps> = ({ children, theme, translateY, panHandlers }) => (
-    <Animated.View
-        style={{
-            position: "absolute",
-            bottom: 80,
-            left: "5%",
-            width: "90%",
-            backgroundColor: theme.colors.surface,
-            borderRadius: 10,
-            padding: 10,
-            flexDirection: "row",
-            alignItems: "center",
-            shadowColor: theme.colors.shadow,
-            shadowOpacity: 0.2,
-            shadowRadius: 5,
-            elevation: 5,
-            transform: [{ translateY }],
-        }}
-        {...panHandlers}
-    >
-        {children}
-    </Animated.View>
+const PlayerContainer: React.FC<PlayerContainerProps> = React.memo(
+    ({ children, theme, translateY, panHandlers }) => (
+        <Animated.View
+            style={{
+                position: "absolute",
+                bottom: 80,
+                left: "5%",
+                width: "90%",
+                backgroundColor: theme.colors.surface,
+                borderRadius: 10,
+                padding: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                shadowColor: theme.colors.shadow,
+                shadowOpacity: 0.2,
+                shadowRadius: 5,
+                elevation: 5,
+                transform: [{ translateY }],
+            }}
+            {...panHandlers}
+        >
+            {children}
+        </Animated.View>
+    )
 );
-const LoadingSkeleton: React.FC<SkeletonProps> = ({ theme }) => (
+
+const LoadingSkeleton: React.FC<SkeletonProps> = React.memo(({ theme }) => (
     <>
         <View style={styles.skeletonThumbnail(theme)} />
         <View style={{ flex: 1 }}>
@@ -303,9 +333,10 @@ const LoadingSkeleton: React.FC<SkeletonProps> = ({ theme }) => (
         </View>
         <View style={styles.skeletonButton(theme)} />
     </>
-);
+));
 
-const SeekBar: React.FC<SeekBarProps> = ({
+
+const SeekBar: React.FC<SeekBarProps> = React.memo(({
     duration,
     seekPosition,
     isSeeking,
@@ -326,9 +357,9 @@ const SeekBar: React.FC<SeekBarProps> = ({
         onSlidingStart={onSeekStart}
         onSlidingComplete={onSeekComplete}
     />
-);
+));
 
-const TimeDisplay: React.FC<TimeDisplayProps> = ({ position, duration, theme }) => (
+const TimeDisplay: React.FC<TimeDisplayProps> = React.memo(({ position, duration, theme }) => (
     <View style={styles.timeContainer}>
         <Text style={[styles.timeText, { color: theme.colors.onSurfaceVariant }]}>
             {formatTime(position)}
@@ -337,27 +368,33 @@ const TimeDisplay: React.FC<TimeDisplayProps> = ({ position, duration, theme }) 
             {formatTime(duration)}
         </Text>
     </View>
-);
+));
 
-const PlayerControls: React.FC<PlayerControlsProps> = ({
+
+const PlayerControls: React.FC<PlayerControlsProps> = React.memo(({
     onPrevious,
     onNext,
     onTogglePlayback,
     playbackState,
     theme
-}) => (
-    <>
-        <ControlButton onPress={onPrevious} icon="skip-previous" theme={theme} />
-        <ControlButton
-            onPress={onTogglePlayback}
-            icon={playbackState === State.Playing ? "pause" : "play-arrow"}
-            theme={theme}
-        />
-        <ControlButton onPress={onNext} icon="skip-next" theme={theme} />
-    </>
-);
+}) => {
+    return (
+        <>
 
-const VolumeControl: React.FC<VolumeControlProps> = ({ volume, onVolumeChange, theme }) => (
+            <ControlButton onPress={onPrevious} icon="skip-previous" theme={theme} />
+            <ControlButton
+                onPress={onTogglePlayback}
+                icon={playbackState === State.Playing ? "pause" : "play-arrow"}
+                theme={theme}
+            />
+            <ControlButton onPress={onNext} icon="skip-next" theme={theme} />
+
+        </>
+    );
+});
+
+
+const VolumeControl: React.FC<VolumeControlProps> = React.memo(({ volume, onVolumeChange, theme }) => (
     <View style={styles.volumeContainer}>
         <Slider
             style={styles.volumeSlider}
@@ -370,13 +407,15 @@ const VolumeControl: React.FC<VolumeControlProps> = ({ volume, onVolumeChange, t
             onSlidingComplete={onVolumeChange}
         />
     </View>
-);
+));
 
-const ControlButton: React.FC<ControlButtonProps> = ({ onPress, icon, theme }) => (
-    <TouchableOpacity onPress={onPress}>
-        <MaterialIcons name={icon} size={30} color={theme.colors.onSurface} />
+
+const ControlButton: React.FC<ControlButtonProps> = React.memo(({ onPress, icon, theme }) => (
+    <TouchableOpacity onPress={onPress} style={{ padding: 0 }}>
+        <MaterialIcons name={icon} size={24} color={theme.colors.onSurface} />
     </TouchableOpacity>
-);
+));
+
 // Style objects
 const styles = {
     thumbnail: {

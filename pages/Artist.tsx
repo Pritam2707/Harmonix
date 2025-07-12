@@ -22,6 +22,7 @@ interface Artist {
     thumbnails: { url: string }[];
     videos: { title: string; videoId: string; thumbnails: { url: string }[] }[];
     browseId: string;
+    channelId: string;
     subscribers?: string;
     views?: string;
     albums?: { results: { browseId: string; title: string; thumbnails: { url: string }[] }[] };
@@ -95,7 +96,8 @@ const ArtistScreen = () => {
     const handleSubscribe = async () => {
         console.log("Subscribing to artist:", artistId);
         try {
-            await PythonModule.subscribeArtist(artistId);
+            await PythonModule.subscribeArtist(artist?.channelId);
+            setTimeout(() => { }, 1000)
             setIsSubscribed(true);
         } catch (error) {
             console.error("Subscription failed:", error);
@@ -105,7 +107,8 @@ const ArtistScreen = () => {
     const handleUnsubscribe = async () => {
         if (!artist) return;
         try {
-            await PythonModule.unsubscribeArtist(artist.browseId);
+            await PythonModule.unsubscribeArtist(artist.channelId);
+            setTimeout(() => { }, 1000)
             setIsSubscribed(false);
         } catch (error) {
             console.error("Error unsubscribing:", error);
@@ -114,7 +117,7 @@ const ArtistScreen = () => {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
             </View>
         );
@@ -122,7 +125,7 @@ const ArtistScreen = () => {
 
     if (!artist) {
         return (
-            <View style={styles.errorContainer}>
+            <View style={[styles.errorContainer, { backgroundColor: theme.colors.background }]}>
                 <Text style={styles.errorText}>Artist not found.</Text>
             </View>
         );
@@ -133,13 +136,13 @@ const ArtistScreen = () => {
             {/* Artist Info */}
             <View style={styles.artistInfo}>
                 <Image
-                    source={{ uri: artist.thumbnails[artist.thumbnails.length - 1]?.url || "https://via.placeholder.com/150" }}
+                    source={{ uri: artist?.thumbnails[artist?.thumbnails?.length - 1]?.url || "https://via.placeholder.com/150" }}
                     style={styles.artistImage}
                 />
                 <Text style={styles.artistName}>{artist.name}</Text>
-                {artist.subscribers && <Text style={styles.subText}>{artist.subscribers} Subscribers</Text>}
-                {artist.views && <Text style={styles.subText}>{artist.views}</Text>}
-                {artist.description && <Text style={styles.artistDescription}>{artist.description}</Text>}
+                {artist?.subscribers && <Text style={styles.subText}>{artist.subscribers} Subscribers</Text>}
+                {artist?.views && <Text style={styles.subText}>{artist?.views}</Text>}
+                {artist?.description && <Text style={styles.artistDescription}>{artist?.description}</Text>}
 
                 {/* Subscribe / Unsubscribe Button */}
                 <Button
@@ -152,7 +155,7 @@ const ArtistScreen = () => {
             </View>
 
             {/* Albums Section */}
-            {artist.albums && artist.albums?.results.length > 0 && (
+            {artist.albums && artist.albums?.results?.length > 0 && (
                 <>
                     <Text style={styles.sectionTitle}>Albums</Text>
                     <FlatList
@@ -161,7 +164,7 @@ const ArtistScreen = () => {
                         renderItem={({ item }) => (
                             <TouchableOpacity style={styles.itemCard} onPress={() => goToAlbum(item.browseId
                             )}>
-                                <Image source={{ uri: item.thumbnails[item.thumbnails.length - 1]?.url }} style={styles.itemThumbnail} />
+                                <Image source={{ uri: item?.thumbnails[item?.thumbnails?.length - 1]?.url }} style={styles.itemThumbnail} />
                                 <Text style={styles.itemTitle}>{item.title}</Text>
                             </TouchableOpacity>
                         )}
@@ -172,7 +175,7 @@ const ArtistScreen = () => {
             )}
 
             {/* Related Artists Section */}
-            {artist.related && artist.related?.results.length > 0 && (
+            {artist.related && artist.related?.results?.length > 0 && (
                 <>
                     <Text style={styles.sectionTitle}>Related Artists</Text>
                     <FlatList
@@ -180,7 +183,7 @@ const ArtistScreen = () => {
                         keyExtractor={(item) => item.browseId}
                         renderItem={({ item }) => (
                             <TouchableOpacity style={styles.itemCard} onPress={() => goToArtist(item.browseId)}>
-                                <Image source={{ uri: item.thumbnails[item.thumbnails.length - 1]?.url }} style={styles.itemThumbnail} />
+                                <Image source={{ uri: item?.thumbnails[item?.thumbnails?.length - 1]?.url }} style={styles.itemThumbnail} />
                                 <Text style={styles.itemTitle}>{item.title}</Text>
                             </TouchableOpacity>
                         )}
@@ -199,7 +202,7 @@ const ArtistScreen = () => {
                         keyExtractor={(item) => item.browseId}
                         renderItem={({ item }) => (
                             <TouchableOpacity style={styles.itemCard} onPress={() => goToAlbum(item.browseId)}>
-                                <Image source={{ uri: item.thumbnails[item.thumbnails.length - 1]?.url }} style={styles.itemThumbnail} />
+                                <Image source={{ uri: item?.thumbnails[item?.thumbnails?.length - 1]?.url }} style={styles.itemThumbnail} />
                                 <Text style={styles.itemTitle}>{item.title} ({item.year})</Text>
                             </TouchableOpacity>
                         )}
@@ -210,7 +213,7 @@ const ArtistScreen = () => {
             )}
 
             {/* Songs Section */}
-            {artist.songs && artist.songs?.results.length > 0 && (
+            {artist.songs && artist.songs?.results?.length > 0 && (
                 <>
                     <Text style={styles.sectionTitle}>Songs</Text>
                     <FlatList
@@ -218,8 +221,8 @@ const ArtistScreen = () => {
                         keyExtractor={(item) => item.videoId}
                         renderItem={({ item }) => (
 
-                            <TouchableOpacity style={styles.itemCard} onPress={() => playSong(item.videoId)}>
-                                <Image source={{ uri: item.thumbnails[item.thumbnails.length - 1]?.url }} style={styles.itemThumbnail} />
+                            <TouchableOpacity style={styles.itemCard} onPress={() => playSong(item.videoId, {})}>
+                                <Image source={{ uri: item?.thumbnails[item?.thumbnails?.length - 1]?.url }} style={styles.itemThumbnail} />
                                 <Text style={styles.itemTitle}>{item.title}</Text>
                                 <Text style={styles.subText}>
                                     {item.artists.map((a) => a.name).join(", ")} - {item.album.name}

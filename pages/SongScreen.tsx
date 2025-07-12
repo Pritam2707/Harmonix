@@ -1,12 +1,50 @@
-import React, { useEffect, useState, useCallback, memo } from "react";
-import { View, Image, ScrollView, TouchableOpacity, FlatList, Alert, NativeModules } from "react-native";
+import React, { useEffect, useState, useCallback, memo, useRef } from "react";
+import {
+    View,
+    Image,
+    ScrollView,
+    FlatList,
+    Alert,
+    NativeModules,
+    StyleSheet,
+    Animated,
+    Dimensions,
+    RefreshControl,
+    Share
+} from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { Text, Card, IconButton, ActivityIndicator, useTheme, MD3Theme } from "react-native-paper";
-import { RootStackParamList } from "../App";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { StyleSheet } from "react-native";
+import {
+    Text,
+    Card,
+    IconButton,
+    ActivityIndicator,
+    useTheme,
+    MD3Theme,
+    Modal,
+    Portal,
+    Button,
+    TouchableRipple
+} from "react-native-paper";
+import type { StackNavigationProp } from "@react-navigation/stack";
+import type { RootStackParamList } from "../App";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
+// import LinearGradient from 'react-native-linear-gradient';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
+const { width } = Dimensions.get('window');
+const THUMBNAIL_SIZE = width * 0.35;
+const shareSong = async (videoId: string) => {
+    const shareUrl = `https://music.youtube.com/watch?v=${videoId}`;
+    try {
+        await Share.share({
+            message: `Check out this song! 🎶\n${shareUrl}`,
+            url: shareUrl, // optional for iOS
+            title: 'Harmonix',
+        });
+    } catch (error) {
+        console.error('Error sharing:', error);
+    }
+};
 interface SongDetails {
     title: string;
     videoId: string;
@@ -14,12 +52,15 @@ interface SongDetails {
     artists: string;
     album?: { name: string; id: string } | null;
     lyrics?: { lyrics: string };
+    track: {
+        likeStatus: string;
+    }
 }
 
 interface RelatedContent {
     title: string;
     contents: Array<{
-        subscribers: string | undefined;
+        subscribers?: string;
         title: string;
         videoId?: string;
         playlistId?: string;
@@ -31,7 +72,6 @@ interface RelatedContent {
 
 type SongScreenNavigationProp = StackNavigationProp<RootStackParamList, "SongDetails">;
 
-// Memoized components to prevent unnecessary re-renders
 const RelatedItemCard = memo(({
     item,
     theme,
@@ -41,33 +81,63 @@ const RelatedItemCard = memo(({
     theme: MD3Theme;
     onPress: () => void;
 }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.95,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 3,
+            tension: 40,
+            useNativeDriver: true,
+        }).start();
+    };
+
     return (
-        <TouchableOpacity onPress={onPress} style={styles.relatedItem}>
-            <Card style={[styles.relatedCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-                <Image
-                    source={{ uri: item.thumbnails?.[item.thumbnails?.length - 1]?.url || "https://via.placeholder.com/150" }}
-                    style={styles.relatedImage}
-                />
-                <Card.Content style={styles.relatedContent}>
-                    <Text
-                        variant="bodyLarge"
-                        numberOfLines={2}
-                        style={[styles.relatedTitle, { color: theme.colors.onSurface }]}
-                    >
-                        {item.title}
-                    </Text>
-                    {item.artists && (
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+            <TouchableRipple
+                onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                style={styles.relatedItem}
+                rippleColor={theme.colors.primary}
+                borderless
+            >
+                <Card style={[styles.relatedCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                    <Image
+                        source={{ uri: item.thumbnails?.[0]?.url || "https://via.placeholder.com/150" }}
+                        style={styles.relatedImage}
+                        resizeMode="cover"
+                    />
+                    <Card.Content style={styles.relatedContent}>
                         <Text
-                            variant="bodySmall"
+                            variant="bodyMedium"
                             numberOfLines={1}
-                            style={[styles.relatedArtist, { color: theme.colors.onSurface }]}
+                            style={[styles.relatedTitle, { color: theme.colors.onSurface }]}
+                            ellipsizeMode="tail"
                         >
-                            {item.artists.map(a => a.name).join(", ")}
+                            {item.title}
                         </Text>
-                    )}
-                </Card.Content>
-            </Card>
-        </TouchableOpacity>
+                        {item.artists && (
+                            <Text
+                                variant="bodySmall"
+                                numberOfLines={1}
+                                style={[styles.relatedArtist, { color: theme.colors.onSurfaceVariant }]}
+                                ellipsizeMode="tail"
+                            >
+                                {item.artists.map(a => a.name).join(", ")}
+                            </Text>
+                        )}
+                    </Card.Content>
+                </Card>
+            </TouchableRipple>
+        </Animated.View>
     );
 });
 
@@ -80,7 +150,48 @@ const SongDetailsPage = () => {
     const [song, setSong] = useState<SongDetails | null>(null);
     const [related, setRelated] = useState<RelatedContent[]>([]);
     const [loading, setLoading] = useState(true);
-    const { playSong } = useMusicPlayer()
+    const [refreshing, setRefreshing] = useState(false);
+    const { playSong, downloadSong } = useMusicPlayer();
+    const [isLiked, setIsLiked] = useState(false);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [playlists, setPlaylists] = useState<any[]>([]);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    const openPlaylistModal = () => setModalVisible(true);
+    const closePlaylistModal = () => setModalVisible(false);
+
+    const handleLike = useCallback(async () => {
+        if (!song) return;
+        const newLikeStatus = !isLiked;
+        setIsLiked(newLikeStatus);
+
+        try {
+            console.log("liking", song.videoId);
+
+            const res = await PythonModule.rateSong(
+                song.videoId,
+                newLikeStatus ? "LIKE" : "INDIFFERENT"
+            );
+            console.log(res)
+        } catch (error) {
+            console.error("Error rating song:", error);
+            setIsLiked(!newLikeStatus);
+        }
+    }, [song, isLiked]);
+
+    const handleAddToPlaylist = useCallback(async (playlistId: string) => {
+        if (!playlistId) return;
+
+        try {
+            await PythonModule.addPlaylistItems(playlistId, videoId, null, false);
+            closePlaylistModal();
+            Alert.alert("Success", "Song added to playlist!");
+        } catch (err) {
+            console.error("Error adding to playlist:", err);
+            Alert.alert("Error", "Could not add to playlist.");
+        }
+    }, [videoId]);
+
     const fetchSongDetails = useCallback(async () => {
         if (!videoId) return;
 
@@ -88,61 +199,95 @@ const SongDetailsPage = () => {
             setLoading(true);
             const response = await PythonModule.getSongInfo(videoId);
             const data = JSON.parse(response);
-            console.log(data)
+
             if (!data.error) {
                 setSong({
                     title: data.title,
                     videoId: data.videoId,
                     thumbnails: data.thumbnails || { thumbnails: [] },
-                    artists: data.artists || "Unknown",
+                    artists: data?.artists || "Unknown",
                     album: data.album || null,
                     lyrics: data.lyrics || { lyrics: "No lyrics available" },
+                    track: data.track
                 });
+                console.log(data)
                 setRelated(data.related || []);
+                setIsLiked(data.track.likeStatus === "LIKE");
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true,
+                }).start();
             }
         } catch (error) {
             console.error("Error fetching song details:", error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     }, [videoId]);
 
-    useEffect(() => {
+    const fetchLibraryPlaylists = useCallback(async () => {
+        try {
+            const playlists = JSON.parse(await PythonModule.getLibraryPlaylists());
+            setPlaylists(playlists.filter((playlist: any) => (
+                playlist.playlistId !== "LM" && playlist.playlistId !== "SE"
+            )));
+        } catch (error) {
+            console.error("Error fetching playlists:", error);
+        }
+    }, []);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
         fetchSongDetails();
     }, [fetchSongDetails]);
+
+    useEffect(() => {
+        fetchSongDetails();
+        fetchLibraryPlaylists();
+    }, [fetchSongDetails, fetchLibraryPlaylists]);
 
     const handleRelatedItemPress = useCallback((item: RelatedContent['contents'][0]) => {
         if (item.videoId) {
             navigation.push("SongDetails", { videoId: item.videoId });
         } else if (item.playlistId) {
             navigation.navigate("Playlist", { playlistId: item.playlistId });
+        } else if (item.browseId) {
+            if (item.subscribers) {
+                navigation.navigate("Artist", { artistId: item.browseId });
+            } else {
+                navigation.navigate("Album", { albumId: item.browseId });
+            }
         }
-        else if (item.subscribers && item.browseId)
-            navigation.navigate("Artist", { artistId: item.browseId });
-        else if (item.browseId)
-            navigation.navigate("Album", { albumId: item.browseId });
     }, [navigation]);
 
     const renderRelatedSection = useCallback(({ item }: { item: RelatedContent }) => (
-        item.title === "About the artist" ?
-            <View style={styles.relatedSection}>
-                <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-                    {item.title}
+        <View style={styles.relatedSection}>
+            <Text
+                variant="titleMedium"
+                style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+            >
+                {item.title}
+            </Text>
+            {item.title === "About the artist" ? (
+                <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                    numberOfLines={3}
+                    ellipsizeMode="tail"
+                >
+                    {item.contents[0]?.title || "No artist information available"}
                 </Text>
-
-
-                <Text variant="bodySmall" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-                    {item.contents.toString()}
-                </Text>
-            </View> :
-            <View style={styles.relatedSection}>
-                <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-                    {item.title}
-                </Text>
+            ) : (
                 <FlatList
                     horizontal
                     data={item.contents}
-                    keyExtractor={(item, idx) => item.videoId || item.playlistId || `item-${idx}`}
+                    keyExtractor={(item, idx) =>
+                        item.videoId || item.playlistId || item.browseId || `item-${idx}`
+                    }
                     showsHorizontalScrollIndicator={false}
                     renderItem={({ item }) => (
                         <RelatedItemCard
@@ -152,14 +297,27 @@ const SongDetailsPage = () => {
                         />
                     )}
                     contentContainerStyle={styles.relatedList}
-                    initialNumToRender={5} // Optimizing initial render
-                    maxToRenderPerBatch={10}
-                    windowSize={10}
+                    initialNumToRender={3}
+                    maxToRenderPerBatch={5}
+                    windowSize={7}
+                    removeClippedSubviews={true}
                 />
-            </View>
+            )}
+        </View>
     ), [theme, handleRelatedItemPress]);
 
-    if (loading) {
+    const handleDownload = useCallback(() => {
+        if (!song) return;
+        downloadSong(videoId, song.title);
+        Alert.alert("Download started");
+    }, [song, videoId, downloadSong]);
+
+    const handlePlay = useCallback(() => {
+        if (!song) return;
+        playSong(song.videoId, {});
+    }, [song, playSong]);
+
+    if (loading && !refreshing) {
         return (
             <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -170,70 +328,217 @@ const SongDetailsPage = () => {
     if (!song) {
         return (
             <View style={[styles.errorContainer, { backgroundColor: theme.colors.background }]}>
-                <Text variant="titleLarge" style={{ color: theme.colors.onSurface }}>
+                <MaterialCommunityIcons
+                    name="music-off"
+                    size={48}
+                    color={theme.colors.error}
+                    style={styles.errorIcon}
+                />
+                <Text variant="titleLarge" style={[styles.errorText, { color: theme.colors.onSurface }]}>
                     Song not found
                 </Text>
+                <Button
+                    mode="contained"
+                    onPress={fetchSongDetails}
+                    style={styles.retryButton}
+                >
+                    Try Again
+                </Button>
             </View>
         );
     }
 
-    const lastThumbnail = song.thumbnails.thumbnails[song.thumbnails.thumbnails.length - 1]?.url;
+    const thumbnailUrl = song.thumbnails.thumbnails[song.thumbnails.thumbnails.length - 1]?.url;
 
     return (
-        <ScrollView
+        <Animated.ScrollView
             contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[theme.colors.primary]}
+                    tintColor={theme.colors.primary}
+                />
+            }
+            style={{ opacity: fadeAnim }}
         >
-            <View style={styles.header}>
-                <Card style={[styles.thumbnailCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-                    <Image
-                        source={{ uri: lastThumbnail || "https://via.placeholder.com/200" }}
-                        style={styles.thumbnailImage}
+            <Portal>
+                <Modal
+                    visible={modalVisible}
+                    onDismiss={closePlaylistModal}
+                    contentContainerStyle={[
+                        styles.modalContainer,
+                        {
+                            backgroundColor: theme.colors.surface,
+                            margin: 20,
+                            borderRadius: 12
+                        }
+                    ]}
+                >
+                    <View style={styles.modalHeader}>
+                        <Text
+                            variant="titleLarge"
+                            style={[styles.modalTitle, { color: theme.colors.onSurface }]}
+                        >
+                            Add to Playlist
+                        </Text>
+                        <IconButton
+                            icon="close"
+                            onPress={closePlaylistModal}
+                            style={styles.modalCloseButton}
+                        />
+                    </View>
+
+                    <FlatList
+                        data={playlists}
+                        keyExtractor={(item: any) => item.playlistId}
+                        renderItem={({ item }) => (
+                            <TouchableRipple
+                                onPress={() => handleAddToPlaylist(item.playlistId)}
+                                style={[
+                                    styles.playlistItem,
+                                    { borderBottomColor: theme.colors.outline },
+                                ]}
+                                rippleColor={theme.colors.primaryContainer}
+                            >
+                                <View style={styles.playlistContent}>
+                                    {item.thumbnails?.length > 0 && (
+                                        <Image
+                                            source={{ uri: item.thumbnails[item.thumbnails.length - 1].url }}
+                                            style={styles.playlistThumbnail}
+                                        />
+                                    )}
+                                    <View style={styles.playlistTextContainer}>
+                                        <Text
+                                            variant="bodyLarge"
+                                            style={{ color: theme.colors.onSurface }}
+                                            numberOfLines={1}
+                                        >
+                                            {item.title}
+                                        </Text>
+                                        <Text
+                                            variant="bodySmall"
+                                            style={{ color: theme.colors.onSurfaceVariant }}
+                                        >
+                                            {item.count} songs
+                                        </Text>
+                                    </View>
+                                </View>
+                            </TouchableRipple>
+                        )}
+                        ListEmptyComponent={
+                            <View style={styles.emptyPlaylists}>
+                                <MaterialCommunityIcons
+                                    name="playlist-music"
+                                    size={48}
+                                    color={theme.colors.onSurfaceVariant}
+                                />
+                                <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+                                    No playlists found
+                                </Text>
+                            </View>
+                        }
                     />
-                </Card>
+
+                    <Button
+                        mode="contained"
+                        onPress={closePlaylistModal}
+                        style={styles.modalButton}
+                        labelStyle={styles.modalButtonLabel}
+                    >
+                        Close
+                    </Button>
+                </Modal>
+            </Portal>
+
+            <View style={styles.header}>
+                <Animated.View
+                    style={[
+                        styles.thumbnailContainer,
+                        {
+                            shadowColor: theme.colors.onSurface,
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 6,
+                        }
+                    ]}
+                >
+                    <Image
+                        source={{ uri: thumbnailUrl || "https://via.placeholder.com/300" }}
+                        style={styles.thumbnailImage}
+                        resizeMode="cover"
+                    />
+                    {/* <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.7)']}
+                        style={styles.thumbnailGradient}
+                    /> */}
+                </Animated.View>
 
                 <View style={styles.headerInfo}>
                     <Text
-                        variant="titleMedium"
+                        variant="titleLarge"
                         numberOfLines={2}
                         style={[styles.songTitle, { color: theme.colors.onSurface }]}
+                        ellipsizeMode="tail"
                     >
                         {song.title}
                     </Text>
                     <Text
                         variant="bodyLarge"
                         numberOfLines={1}
-                        style={[styles.artistName, { color: theme.colors.onSurface }]}
+                        style={[styles.artistName, { color: theme.colors.onSurfaceVariant }]}
+                        ellipsizeMode="tail"
                     >
                         {song.artists}
                     </Text>
-
-
+                    {song.album && (
+                        <Text
+                            variant="bodyMedium"
+                            style={[styles.albumName, { color: theme.colors.onSurfaceVariant }]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                        >
+                            {song.album.name}
+                        </Text>
+                    )}
 
                     <View style={styles.actionButtons}>
                         <IconButton
-                            icon="heart"
-                            iconColor={theme.colors.error}
+                            icon={isLiked ? "heart" : "heart-outline"}
+                            iconColor={isLiked ? theme.colors.error : theme.colors.onSurface}
                             size={24}
-                            onPress={() => Alert.alert("Working on it")}
+                            onPress={handleLike}
+                            style={styles.actionButton}
                         />
-                        {/* <IconButton
-                            icon="playlist-plus"
+                        <IconButton
+                            icon="share"
                             iconColor={theme.colors.onSurface}
                             size={24}
-                            onPress={() => Alert.alert("Not now")}
-                        /> */}
+                            onPress={() => shareSong(song.videoId)}
+                            style={styles.actionButton}
+                        />
                         <IconButton
                             icon="download"
                             iconColor={theme.colors.onSurface}
                             size={24}
-                            onPress={() => Alert.alert("WORKING ON IT")}
+                            onPress={handleDownload}
+                            style={styles.actionButton}
                         />
                         <IconButton
-                            icon="play-circle"  // Play button icon
-                            iconColor={theme.colors.onSurface}  // Set icon color based on the theme
-                            size={24}  // Set the size of the icon
-                            onPress={() => playSong(song.videoId)}  // Replace this with the actual functionality
+                            icon="play-circle"
+                            iconColor={theme.colors.primary}
+                            size={24}
+                            onPress={handlePlay}
+                            style={styles.actionButton}
+                        />
+                        <IconButton
+                            icon="playlist-plus"
+                            iconColor={theme.colors.onSurface}
+                            size={24}
+                            onPress={openPlaylistModal}
+                            style={styles.actionButton}
                         />
                     </View>
                 </View>
@@ -244,9 +549,17 @@ const SongDetailsPage = () => {
                     <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
                         Lyrics
                     </Text>
-                    <Text style={[styles.lyricsText, { color: theme.colors.onSurface }]}>
-                        {song.lyrics.lyrics}
-                    </Text>
+                    <ScrollView
+                        style={styles.lyricsScroll}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <Text
+                            style={[styles.lyricsText, { color: theme.colors.onSurface }]}
+                            selectable
+                        >
+                            {song.lyrics.lyrics}
+                        </Text>
+                    </ScrollView>
                 </View>
             )}
 
@@ -255,16 +568,21 @@ const SongDetailsPage = () => {
                 renderItem={renderRelatedSection}
                 keyExtractor={(item, index) => `section-${index}`}
                 scrollEnabled={false}
-                ListFooterComponent={<View style={{ height: 32 }} />}
+                ListFooterComponent={<View style={styles.footer} />}
+                removeClippedSubviews={true}
+                initialNumToRender={3}
+                maxToRenderPerBatch={5}
+                windowSize={7}
             />
-        </ScrollView>
+        </Animated.ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
+        flexGrow: 1,
         padding: 16,
-        paddingBottom: 0,
+        paddingBottom: 24,
     },
     loadingContainer: {
         flex: 1,
@@ -275,50 +593,80 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
-        padding: 20,
+        padding: 24,
+    },
+    errorIcon: {
+        marginBottom: 16,
+    },
+    errorText: {
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    retryButton: {
+        borderRadius: 8,
+        width: 150,
     },
     header: {
         flexDirection: "row",
         marginBottom: 24,
     },
-    thumbnailCard: {
-        width: 150,
-        height: 150,
-        marginRight: 16,
+    thumbnailContainer: {
+        width: THUMBNAIL_SIZE,
+        height: THUMBNAIL_SIZE,
         borderRadius: 8,
-        overflow: "hidden",
+        overflow: 'hidden',
+        marginRight: 16,
     },
     thumbnailImage: {
-        width: "100%",
-        height: "100%",
+        width: '100%',
+        height: '100%',
     },
+    // thumbnailGradient: {
+    //     position: 'absolute',
+    //     left: 0,
+    //     right: 0,
+    //     bottom: 0,
+    //     height: '50%',
+    // },
     headerInfo: {
         flex: 1,
-        justifyContent: "center",
+        justifyContent: 'center',
     },
     songTitle: {
         fontWeight: "bold",
         marginBottom: 4,
+        fontSize: 22,
     },
     artistName: {
         marginBottom: 4,
+        opacity: 0.8,
     },
     albumName: {
-        marginBottom: 8,
+        marginBottom: 12,
+        opacity: 0.6,
     },
     actionButtons: {
-        flexDirection: "row",
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         marginTop: 8,
+    },
+    actionButton: {
+        margin: 0,
     },
     lyricsSection: {
         marginBottom: 24,
     },
+    lyricsScroll: {
+        // maxHeight: 200,
+    },
     lyricsText: {
-        lineHeight: 22,
+        lineHeight: 24,
+        fontSize: 16,
     },
     sectionTitle: {
         fontWeight: "bold",
         marginBottom: 12,
+        fontSize: 18,
     },
     relatedSection: {
         marginBottom: 20,
@@ -328,29 +676,84 @@ const styles = StyleSheet.create({
     },
     relatedItem: {
         marginRight: 12,
-        width: 150, // Same width for square aspect ratio
-        height: 150, // Height equals width to make it square
+        width: 150,
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     relatedCard: {
         borderRadius: 8,
         overflow: "hidden",
-        height: '100%', // Ensure the card takes full height
+        height: 200,
     },
     relatedImage: {
         width: "100%",
-        height: "100%",
-        objectFit: "cover", // Make sure the image fills the square
+        height: 150,
     },
     relatedContent: {
         padding: 8,
+        height: 50,
+        justifyContent: "center",
     },
     relatedTitle: {
         fontWeight: "500",
-        marginBottom: 4,
     },
     relatedArtist: {
-        opacity: 0.8,
+        opacity: 0.7,
+        fontSize: 12,
+    },
+    modalContainer: {
+        padding: 16,
+        maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontWeight: 'bold',
+    },
+    modalCloseButton: {
+        margin: 0,
+    },
+    playlistItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderBottomWidth: 1,
+    },
+    playlistContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    playlistThumbnail: {
+        width: 48,
+        height: 48,
+        borderRadius: 4,
+        marginRight: 12,
+    },
+    playlistTextContainer: {
+        flex: 1,
+    },
+    emptyPlaylists: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    emptyText: {
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    modalButton: {
+        marginTop: 16,
+        borderRadius: 8,
+    },
+    modalButtonLabel: {
+        fontWeight: '500',
+    },
+    footer: {
+        height: 32,
     },
 });
 
-export default SongDetailsPage;
+export default memo(SongDetailsPage);

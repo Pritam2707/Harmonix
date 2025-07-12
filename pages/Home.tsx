@@ -1,21 +1,29 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState, useMemo } from "react";
 import {
     View,
     Text,
-    TextInput,
     FlatList,
     Image,
     TouchableOpacity,
     StyleSheet,
     ScrollView,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import { useMusic } from "../hooks/useMusic";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
 import { useNavigation } from "@react-navigation/native";
-import { useTheme, Card, ActivityIndicator } from "react-native-paper";
+import {
+    useTheme,
+    Card,
+    ActivityIndicator,
+    TextInput,
+} from "react-native-paper";
 import { getCategory } from "../hooks/getCategory";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
+import { useOfflineStatus } from "../hooks/useOfflineStatus";
+import OfflinePage from "./Offline";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Album">;
 
@@ -24,40 +32,57 @@ const HomeScreen = () => {
     const navigation = useNavigation<HomeScreenNavigationProp>();
     const { homeData, loading, error, getHome } = useMusic();
     const { playSong } = useMusicPlayer();
-
+    const [searchQuery, setSearchQuery] = useState("");
+    const { isOffline } = useOfflineStatus()
     useEffect(() => {
         getHome();
-    }, []);
+    }, [isOffline]);
 
-    const styles = StyleSheet.create({
+    const handlePlay = useCallback(async (songId: string) => {
+        await playSong(songId, {});
+    }, [playSong]);
+
+    const handleSearch = useCallback(() => {
+        const query = searchQuery.trim();
+        if (query.length > 0) {
+            navigation.navigate("SearchPage", { param: query });
+            setSearchQuery("");
+        }
+    }, [searchQuery, navigation]);
+
+    const styles = useMemo(() => StyleSheet.create({
         container: {
             flex: 1,
             padding: 4,
+            backgroundColor: theme.colors.background,
         },
         navbar: {
             flexDirection: "row",
-            justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: 16,
+            justifyContent: "space-between",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            elevation: 2,
         },
         title: {
-            fontSize: 20,
             fontWeight: "bold",
-            color: theme.colors.onBackground,
+            fontSize: 20,
+            color: theme.colors.primary,
         },
         searchContainer: {
+            flex: 1,
             flexDirection: "row",
             alignItems: "center",
-            backgroundColor: "rgba(255, 255, 255, 0.1)",
-            borderRadius: 8,
-            paddingHorizontal: 10,
-            flex: 1,
-            maxWidth: 400,
+            borderRadius: 24,
+            paddingHorizontal: 12,
+            height: 48,
+            backgroundColor: theme.colors.elevation.level1,
         },
         searchInput: {
             flex: 1,
-            color: theme.colors.onBackground,
-            paddingVertical: 8,
+            backgroundColor: "transparent",
+            fontSize: 16,
+            color: theme.colors.onSurface,
         },
         section: {
             marginBottom: 24,
@@ -77,6 +102,7 @@ const HomeScreen = () => {
             height: 140,
             borderTopLeftRadius: 8,
             borderTopRightRadius: 8,
+            backgroundColor: "#333",
         },
         songTitle: {
             fontSize: 14,
@@ -92,98 +118,146 @@ const HomeScreen = () => {
             color: theme.colors.error || "red",
             marginTop: 10,
         },
-    });
+    }), [theme]);
 
-    const handlePlay = useCallback(
-        async (songId: string) => {
-            await playSong(songId);
-        },
-        [playSong]
-    );
+    const renderItem = useCallback(({ item, index, sectionTitle }: any) => {
+        const title = item.title ?? "Unknown";
+        const artists = item.artists ?? [];
+        const thumbnail = item.thumbnails?.[item.thumbnails.length - 1]?.url;
+        const category = getCategory(item);
 
-    if (loading)
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                key={`${sectionTitle}-${index}`}
+                onLongPress={() => {
+                    if (category === "Song/Video") {
+                        navigation.navigate("SongDetails", { videoId: item.videoId })
+                    } else if (category === "Album" && item.browseId) {
+                        navigation.navigate("Album", { albumId: item.browseId });
+                    } else if (category === "Playlist" && item.playlistId) {
+                        navigation.navigate("Playlist", { playlistId: item.playlistId });
+                    }
+                }}
+                onPress={() => {
+                    if (category === "Song/Video") {
+                        handlePlay(item.videoId);
+                    } else if (category === "Album" && item.browseId) {
+                        navigation.navigate("Album", { albumId: item.browseId });
+                    } else if (category === "Playlist" && item.playlistId) {
+                        navigation.navigate("Playlist", { playlistId: item.playlistId });
+                    }
+                }}
+            >
+                <Card style={{ backgroundColor: theme.colors.surface }}>
+                    {thumbnail ? (
+                        <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
+                    ) : (
+                        <ActivityIndicator size="small" style={styles.thumbnail} />
+                    )}
+                    <Card.Content>
+                        <Text numberOfLines={1} style={styles.songTitle}>
+                            {title}
+                        </Text>
+                        <Text style={styles.artistText}>
+                            {artists.map((artist: { id: any; name: string }, i: number) => (
+                                <Text
+                                    key={artist.id || i}
+                                    onPress={() => {
+                                        if (artist.id) {
+                                            navigation.navigate("Artist", { artistId: artist.id });
+                                        }
+                                    }}
+                                    style={[
+                                        styles.artistText,
+                                        artist.id && { textDecorationLine: "underline" },
+                                    ]}
+                                >
+                                    {artist.name}
+                                    {i < artists.length - 1 ? ", " : ""}
+                                </Text>
+                            ))}
+                        </Text>
+                    </Card.Content>
+                </Card>
+            </TouchableOpacity>
+        );
+    }, [handlePlay, navigation, theme.colors.surface, styles]);
+
+    if (isOffline) {
+        return <OfflinePage />
+    }
+    if (loading) {
         return (
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: theme.colors.background }}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
             </View>
         );
+    }
 
-    if (error) return <Text style={styles.errorText}>{error}</Text>;
+    if (error) {
+        return <Text style={styles.errorText}>{error}</Text>;
+    }
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.container}
+        >
             <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={{ fontSize: 30, color: theme.colors.onSurface, margin: 20, marginHorizontal: 10 }}>Harmonix</Text>
+                <View style={styles.navbar}>
+                    <Text style={styles.title}>Harmonix</Text>
+                    <View style={styles.searchContainer}>
+                        <TextInput
+                            placeholder="Search..."
+                            placeholderTextColor={theme.colors.onSurfaceVariant}
+                            style={styles.searchInput}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            onSubmitEditing={handleSearch}
+                            returnKeyType="search"
+                            mode="outlined"
+                            outlineColor="transparent"
+                            activeOutlineColor="transparent"
+                            left={
+                                <TextInput.Icon
+                                    icon="magnify"
+                                    onPress={handleSearch}
+                                    color={theme.colors.onSurfaceVariant}
+                                />
+                            }
+                            theme={{
+                                colors: {
+                                    primary: theme.colors.primary,
+                                    background: theme.colors.elevation.level1,
+                                },
+                            }}
+                        />
+                    </View>
+                </View>
 
-                {homeData?.map((section, index) => (
-                    <View key={index} style={styles.section}>
+                {homeData?.map((section, sectionIndex) => (
+                    <View key={sectionIndex} style={styles.section}>
                         <Text style={styles.sectionTitle}>{section.title}</Text>
                         <FlatList
-                            data={section.contents.filter(item => item !== null)}
+                            data={section.contents.filter(Boolean)}
                             horizontal
-                            keyExtractor={(item, idx) => `${section.title}-${idx}`}
+                            keyExtractor={(_, idx) => `${section.title}-${idx}`}
                             showsHorizontalScrollIndicator={false}
-                            renderItem={({ item }) => {
-                                const title = item.title ?? "Unknown";
-                                const artists = item.artists ?? [];
-                                const thumbnail = item.thumbnails?.[item.thumbnails.length - 1]?.url;
-                                const category = getCategory(item);
-
-                                return (
-                                    <TouchableOpacity
-                                        style={styles.card}
-                                        onPress={() => {
-                                            if (category === "Song/Video") {
-                                                handlePlay(item.videoId);
-                                            } else if (category === "Album" && item.browseId) {
-                                                navigation.navigate("Album", { albumId: item.browseId });
-                                            } else if (category === "Playlist" && item.playlistId) {
-                                                console.log(item.playlistId);
-                                                navigation.navigate("Playlist", { playlistId: item.playlistId });
-                                            }
-                                        }}
-                                    >
-                                        <Card style={{ backgroundColor: theme.colors.surface }}>
-                                            {thumbnail ? (
-                                                <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
-                                            ) : (
-                                                <ActivityIndicator size="small" style={styles.thumbnail} />
-                                            )}
-                                            <Card.Content>
-                                                <Text
-                                                    style={styles.songTitle}
-                                                    numberOfLines={1}
-                                                    ellipsizeMode="tail"
-                                                >
-                                                    {title}
-                                                </Text>
-                                                <Text style={styles.artistText}>
-                                                    {artists.map((artist, i) => (
-                                                        <Text
-                                                            key={artist.id || i}
-                                                            style={[styles.artistText, i < artists.length - 1 && { textDecorationLine: "underline" }]}
-                                                            onPress={() => {
-                                                                if (i < artists.length - 1) {
-                                                                    navigation.navigate("Artist", { artistId: artist.id });
-                                                                }
-                                                            }}
-                                                        >
-                                                            {artist.name}
-                                                            {i < artists.length - 1 ? ", " : ""}
-                                                        </Text>
-                                                    ))}
-                                                </Text>
-                                            </Card.Content>
-                                        </Card>
-                                    </TouchableOpacity>
-                                );
-                            }}
+                            windowSize={5}
+                            initialNumToRender={4}
+                            maxToRenderPerBatch={5}
+                            updateCellsBatchingPeriod={16}
+                            removeClippedSubviews
+                            renderItem={({ item, index }) =>
+                                renderItem({ item, index, sectionTitle: section.title })
+                            }
                         />
                     </View>
                 ))}
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 };
 
-export default HomeScreen;
+export default React.memo(HomeScreen);

@@ -5,6 +5,7 @@ import { HomeSection } from "../types/HomeSection";
 import { SearchResult } from "../types/SearchBody";
 import { Song } from "../types/Song";
 import { NativeModules } from "react-native";
+import { useOfflineStatus } from "./useOfflineStatus";
 
 export function useMusic() {
     const [homeData, setHomeData] = useState<HomeSection[] | null>(null);
@@ -13,8 +14,9 @@ export function useMusic() {
     const [error, setError] = useState<string | null>(null);
 
     const { PythonModule } = NativeModules;
-
+    const { isOffline } = useOfflineStatus()
     const getHome = async () => {
+        if (isOffline) return
         setLoading(true);
         setError(null);
         try {
@@ -36,7 +38,6 @@ export function useMusic() {
 
         try {
             const response = await PythonModule.searchMusic(query); // ✅ Await the promise
-            console.log("Raw response:", response);
 
             const data = JSON.parse(response); // ✅ Ensure JSON parsing
             console.log("Parsed data:", data);

@@ -1,8 +1,9 @@
-import React from "react";
-import { View, Text, Button, StyleSheet } from "react-native";
+import React, { useCallback, memo } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../App"; // Import the type
+import { RootStackParamList } from "../App";
 import { useNavigation } from "@react-navigation/native";
+import { TouchableOpacity } from "react-native-gesture-handler";
 
 // Define the navigation type for this screen
 type WelcomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Welcome">;
@@ -10,17 +11,31 @@ type WelcomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Welc
 const WelcomeScreen = () => {
     const navigation = useNavigation<WelcomeScreenNavigationProp>();
 
+    // Memoize the navigation callback
+    const handleLoginPress = useCallback(() => {
+        navigation.navigate("Auth");
+    }, [navigation]);
+
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Welcome to EchoMusic</Text>
+            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
+                Welcome to EchoMusic
+            </Text>
             <Text style={styles.info}>
                 This app requires access to your YouTube Music account to fetch and play songs.
             </Text>
-            <Button title="Login with YouTube Music" onPress={() => navigation.navigate("Auth")} />
+            <TouchableOpacity
+                style={styles.button}
+                onPress={handleLoginPress}
+                activeOpacity={0.7}
+            >
+                <Text style={styles.buttonText}>Login with YouTube Music</Text>
+            </TouchableOpacity>
         </View>
     );
 };
 
+// Using StyleSheet.create for optimal performance
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -34,13 +49,28 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         color: "#fff",
         marginBottom: 10,
+        maxWidth: '90%',
     },
     info: {
         fontSize: 16,
         color: "#aaa",
         textAlign: "center",
         marginBottom: 20,
+        maxWidth: '90%',
+    },
+    button: {
+        backgroundColor: '#4285F4',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 4,
+        marginTop: 20,
+    },
+    buttonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
 
-export default WelcomeScreen;
+// Memoize the entire component to prevent unnecessary re-renders
+export default memo(WelcomeScreen);

@@ -1,75 +1,71 @@
 import React, { useEffect, useState } from "react";
-import { View, FlatList, TouchableOpacity, StyleSheet, Dimensions } from "react-native";
+import { View, FlatList, TouchableOpacity, StyleSheet } from "react-native";
 import { Text, Card, ActivityIndicator, IconButton, useTheme } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
-import { getHistory, SongHistory } from "../services/HistoryService";
+import { Song } from "../types/Song";
 
-
-
-const History: React.FC = () => {
-    // const { playSong } = useMusicPlayer();
-    const [history, setHistory] = useState<SongHistory[]>([]);
+const Downloads = () => {
+    const [cachedSongs, setCachedSongs] = useState<Song[]>([]);
     const [loading, setLoading] = useState(false);
-    const { playSong } = useMusicPlayer()
+    const { playSong, getCachedSongs } = useMusicPlayer();
     const navigation = useNavigation();
     const theme = useTheme();
 
     useEffect(() => {
-        const fetchHistory = async () => {
+        const fetchCachedSongs = async () => {
             setLoading(true);
             try {
-                const historyData = await getHistory();
-                if (historyData) {
-                    setHistory(historyData);
-                }
+                const songs = await getCachedSongs();
+                setCachedSongs(songs);
             } catch (error) {
-                console.error("Error fetching history:", error);
+                console.error("Error fetching cached songs:", error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchHistory();
+        fetchCachedSongs();
     }, []);
 
-    const handlePlay = (videoId: string) => {
-        playSong(videoId, {})
+    const handlePlay = (filePath: string) => {
+        playSong(filePath, { isLocal: true });
     };
 
-    if (loading) return (
-        <View style={[styles.loader, { backgroundColor: theme.colors.background }]}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-    );
+    if (loading) {
+        return (
+            <View style={[styles.loader, { backgroundColor: theme.colors.background }]}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={styles.header}>
                 <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-                <Text variant="titleLarge" style={{ color: theme.colors.onBackground }}>Listening History</Text>
+                <Text variant="titleLarge" style={{ color: theme.colors.onBackground }}>Cached Songs</Text>
             </View>
-            {history.length === 0 ? (
-                <Text style={[styles.noHistory, { color: theme.colors.onSurfaceVariant }]}>No history available.</Text>
+            {cachedSongs.length === 0 ? (
+                <Text style={[styles.noHistory, { color: theme.colors.onSurfaceVariant }]}>
+                    No downloaded songs.
+                </Text>
             ) : (
                 <FlatList
-                    data={history}
-                    keyExtractor={(item) => item.videoId}
+                    data={cachedSongs}
+                    keyExtractor={(item) => item.videoDetails.videoId}
                     numColumns={2}
                     columnWrapperStyle={styles.row}
                     renderItem={({ item }) => (
-                        <TouchableOpacity onPress={() => handlePlay(item.videoId)} style={styles.cardContainer}>
+                        <TouchableOpacity onPress={() => handlePlay(item.videoDetails.videoId)} style={styles.cardContainer}>
                             <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-                                <Card.Cover source={{ uri: item.artwork }} style={styles.image} />
+                                <Card.Cover source={{ uri: item.videoDetails.thumbnail.thumbnails[item.videoDetails.thumbnail.thumbnails.length - 1].url }} style={styles.image} />
                                 <Card.Content>
                                     <Text variant="bodyLarge" numberOfLines={1} style={[styles.title, { color: theme.colors.onSurface }]}>
-                                        {item.title}
+                                        {item.videoDetails.title}
                                     </Text>
-                                    <Text variant="bodyMedium" style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}>
-                                        {item.artist}
-                                    </Text>
-                                    <Text variant="bodySmall" style={[styles.played, { color: theme.colors.outline }]}>
-                                        {new Date(item.played as string)?.toLocaleString()}
+                                    <Text variant="bodyMedium" numberOfLines={1} style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}>
+                                        {item.videoDetails.author}
                                     </Text>
                                 </Card.Content>
                             </Card>
@@ -117,11 +113,10 @@ const styles = StyleSheet.create({
     title: {
         fontWeight: "bold",
     },
-    artist: {},
-    played: {
-        fontSize: 12,
-        marginTop: 5,
+    artist: {
+        fontSize: 14,
+        marginTop: 2,
     },
 });
 
-export default History;
+export default Downloads;

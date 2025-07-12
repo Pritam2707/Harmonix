@@ -10,7 +10,7 @@ import {
     Dimensions
 } from "react-native";
 import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
-import { useTheme } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 import { useMusicPlayer } from "../hooks/useMusicPlayer";
 
 const FALLBACK_IMAGE = "https://placehold.co/300";
@@ -30,6 +30,7 @@ interface Track {
 }
 
 interface Album {
+    audioPlaylistId: string;
     title: string;
     type?: string;
     thumbnails?: { url: string }[];
@@ -52,7 +53,7 @@ const AlbumScreen = () => {
     const { albumId } = route.params ?? {};
     const [album, setAlbum] = useState<Album | null>(null);
     const [loading, setLoading] = useState(true);
-    const { playSong } = useMusicPlayer();
+    const { playSong, playPlaylist } = useMusicPlayer();
 
     useEffect(() => {
         const fetchAlbum = async () => {
@@ -65,7 +66,7 @@ const AlbumScreen = () => {
             try {
                 const response = await PythonModule.getAlbum(albumId);
                 const data = JSON.parse(response);
-
+                // console.log(data)
                 const tracksWithThumbs = await Promise.all(
                     data.tracks.map(async (track: Track) => {
                         try {
@@ -94,7 +95,7 @@ const AlbumScreen = () => {
 
     const renderTrack = useCallback(({ item }: { item: Track }) => (
         <TouchableOpacity
-            onPress={() => item.videoId && playSong(item.videoId)}
+            onPress={() => item.videoId && playSong(item.videoId, {})}
             style={{
                 width: CARD_SIZE,
                 height: CARD_SIZE + 50,
@@ -172,6 +173,23 @@ const AlbumScreen = () => {
                 <Text style={{ color: colors.onSurface, fontSize: 12 }}>
                     {album.trackCount} tracks • {album.duration}
                 </Text>
+                <Button
+                    // variant="labelSmall"
+                    style={[
+                        // styles.ownedBadge,
+                        {
+                            marginTop: 12,
+                            backgroundColor: colors.primary,
+                            // paddingVertical: 10,
+                            // paddingHorizontal: 10,
+                            borderRadius: 20,
+                        }
+                    ]}
+                    onPress={() => playPlaylist(album.tracks, album.audioPlaylistId)} children={
+                        <Text style={{ color: colors.onBackground }}>Play</Text>
+                    } />
+
+
             </View>
 
             <FlatList

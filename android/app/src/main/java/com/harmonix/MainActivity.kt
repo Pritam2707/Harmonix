@@ -14,7 +14,7 @@ class MainActivity : ReactActivity() {
         super.onCreate(savedInstanceState)
     }
 
-    override fun getMainComponentName(): String = "EchoMusic"
+    override fun getMainComponentName(): String = "Harmonix"
 
     override fun createReactActivityDelegate(): ReactActivityDelegate =
         DefaultReactActivityDelegate(this, mainComponentName, DefaultNewArchitectureEntryPoint.fabricEnabled)
