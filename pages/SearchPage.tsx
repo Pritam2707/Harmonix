@@ -82,31 +82,43 @@ const SearchScreen = () => {
         },
         [navigation, playSong]
     );
-    const groupedData = useMemo(() => {
-        if (!Array.isArray(searchResults)) return [];
+ const groupedData = useMemo(() => {
+    if (!Array.isArray(searchResults)) return [];
 
-        const categories = ["Top result", "Songs", "Albums", "Community Playlists", "Artists"];
-        const groups = [];
+    // Map resultType to display categories
+    const typeToCategory = {
+        song: "Songs",
+        video: "Songs",          // Videos grouped under Songs
+        album: "Albums",
+        playlist: "Community Playlists",
+        artist: "Artists",
+    };
 
-        for (const category of categories) {
-            let items = searchResults.filter((item) => {
-                if (category === "Songs") {
-                    return item.category === "Songs" || item.category === "Videos";
-                }
-                return item.category === category;
-            });
+    // Define the display order
+    const categories = ["Top result", "Songs", "Albums", "Community Playlists", "Artists"];
+    const groups = [];
 
-            if (category === "Songs") {
-                items.sort((a, b) => (a.category === "Videos" ? -1 : 1));
+    for (const category of categories) {
+        let items = searchResults.filter((item) => {
+            if (category === "Top result") {
+                // Optional: include any item marked as top, or fallback to first few items
+                return item.resultType; // could include all for Top result or customize
             }
+            return typeToCategory[item.resultType] === category;
+        });
 
-            if (items.length) {
-                groups.push({ title: category, data: items });
-            }
+        // Sort videos before songs in the "Songs" category
+        if (category === "Songs") {
+            items.sort((a, b) => (a.resultType === "video" ? -1 : 1));
         }
 
-        return groups;
-    }, [searchResults]);
+        if (items.length) {
+            groups.push({ title: category, data: items });
+        }
+    }
+
+    return groups;
+}, [searchResults]);
 
     const MemoCard = useMemo(() => React.memo(({ item }: { item: any }) => {
         const title = item.resultType === "artist" ? item?.artist : item?.title?.trim() || "Unknown Title";

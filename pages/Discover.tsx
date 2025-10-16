@@ -38,16 +38,15 @@ interface Category {
 
 type PlaylistScreenNavigationProp = StackNavigationProp<RootStackParamList, "MoodPlaylists">;
 
-const VideoCard = memo(({ video, onPress, onLongPress }: { video: Video; onPress: (id: string) => void, onLongPress: (id: string) => void }) => {
-    if (!video.videoId) return null;
+const PlaylistCard = memo(({ playlist, onPress }: { playlist: any; onPress: (id: string) => void }) => {
+    if (!playlist.playlistId) return null;
     const theme = useTheme();
-    const lastThumbnail = video.thumbnails[video.thumbnails.length - 1];
+    const lastThumbnail = playlist.thumbnails[playlist.thumbnails.length - 1];
     const aspectRatio = lastThumbnail ? lastThumbnail.width / lastThumbnail.height : 16 / 9;
 
     return (
         <TouchableOpacity
-            onLongPress={() => onLongPress(video.videoId)}
-            onPress={() => onPress(video.videoId)}
+            onPress={() => onPress(playlist.playlistId)}
             style={styles.videoContainer}
         >
             <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
@@ -62,7 +61,7 @@ const VideoCard = memo(({ video, onPress, onLongPress }: { video: Video; onPress
                         style={[styles.videoTitle, { color: theme.colors.onSurface }]}
                         ellipsizeMode="tail"
                     >
-                        {video.title}
+                        {playlist.title}
                     </Text>
                 </Card.Content>
             </Card>
@@ -85,15 +84,14 @@ const MoodCard = memo(({ mood, onPress }: { mood: Category; onPress: (params: st
 
 const Discover = () => {
     const navigation = useNavigation<PlaylistScreenNavigationProp>();
-    const [videos, setVideos] = useState<Video[]>([]);
+    const [playlists, setPlaylists] = useState<any[]>([]);  
     const [moods, setMoods] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const theme = useTheme();
-    const { playSong } = useMusicPlayer();
     const { PythonModule } = NativeModules;
     const { isOffline } = useOfflineStatus();
     const { width } = useWindowDimensions();
-
+    const [artists, setArtists] = useState<any[]>([]);
     // Calculate number of columns based on screen width
     const numColumns = useMemo(() => {
         if (width > 1200) return 4;   // Large tablets/desktop
@@ -110,20 +108,78 @@ const Discover = () => {
 
     const fetchData = useCallback(async () => {
         if (isOffline) return;
+        
         try {
             setLoading(true);
-            const [chartsRes, categoriesRes] = await Promise.all([
+            const [chartsResIndian, chartResGlobal, categoriesRes] = await Promise.all([
+                PythonModule.getCharts("IN"),
                 PythonModule.getCharts("ZZ"),
                 PythonModule.getMoodCategories()
             ]);
+            
+            // Parse all responses at once to catch any JSON parsing errors
+            const [chartsDataIndian, chartsDataGlobal, categoriesData] = [
+                JSON.parse(chartsResIndian),
+                JSON.parse(chartResGlobal),
+                JSON.parse(categoriesRes)
+            ];
 
-            const chartsData = JSON.parse(chartsRes);
-            const categoriesData = JSON.parse(categoriesRes);
 
-            if (chartsData?.videos?.items) setVideos(chartsData.videos.items);
-            if (categoriesData["Moods & moments"]) setMoods(categoriesData["Moods & moments"]);
+            // Merge artists from both Indian and Global charts, removing duplicates
+            const indianArtists = Array.isArray(chartsDataIndian?.artists) ? chartsDataIndian.artists : [];
+            const globalArtists = Array.isArray(chartsDataGlobal?.artists) ? chartsDataGlobal.artists : [];
+            
+            // Use Map to keep only unique artists based on browseId
+            const uniqueArtistsMap = new Map();
+            [...indianArtists, ...globalArtists].forEach(artist => {
+                if (artist?.browseId && !uniqueArtistsMap.has(artist.browseId)) {
+                    uniqueArtistsMap.set(artist.browseId, artist);
+                }
+            });
+            
+            // Convert Map values back to array
+            setArtists(Array.from(uniqueArtistsMap.values()));
+
+            // Combine all playlists and remove duplicates
+            setPlaylists(prev => {
+                // Create array of all new playlists
+                const newPlaylistsArray = [
+                    ...(Array.isArray(chartsDataGlobal?.videos) ? chartsDataGlobal.videos : []),
+                    ...(Array.isArray(chartsDataIndian?.daily) ? chartsDataIndian.daily : []),
+                    ...(Array.isArray(chartsDataIndian?.weekly) ? chartsDataIndian.weekly : []),
+                ];
+
+                // Create a Map to store unique playlists
+                const uniquePlaylistsMap = new Map();
+                
+                // Add existing playlists to the Map
+                prev.forEach(playlist => {
+                    if (playlist?.playlistId) {
+                        uniquePlaylistsMap.set(playlist.playlistId, playlist);
+                    }
+                });
+
+                // Add new playlists, overwriting any duplicates
+                newPlaylistsArray.forEach(playlist => {
+                    if (playlist?.playlistId) {
+                        uniquePlaylistsMap.set(playlist.playlistId, playlist);
+                    }
+                });
+
+                // Convert Map back to array
+                return Array.from(uniquePlaylistsMap.values());
+            });
+            
+            // Set moods if available
+            if (categoriesData?.["Moods & moments"]) {
+                setMoods(categoriesData["Moods & moments"]);
+            }
+            console.log(chartsDataIndian.artists)
         } catch (error) {
-            console.error("Error fetching data:", error);
+            console.error("Error fetching data:", error instanceof Error ? error.message : "Unknown error");
+            setArtists([]);
+            setPlaylists([]);
+            setMoods([]);
         } finally {
             setLoading(false);
         }
@@ -139,13 +195,13 @@ const Discover = () => {
         navigation.navigate("MoodPlaylists", { mood: params });
     }, [navigation]);
 
-    const handleVideoPress = useCallback((videoId: string) => {
-        playSong(videoId, {});
-    }, [playSong]);
-
-    const handleLongVideoPress = useCallback((videoId: string) => {
-        navigation.navigate("SongDetails", { videoId: videoId });
+    const handlePlaylistPress = useCallback((playlistId: string) => {
+        navigation.navigate("Playlist", { playlistId: playlistId });
     }, [navigation]);
+const handleArtistPress = useCallback((artistId: string) => {
+        navigation.navigate("Artist", { artistId: artistId });
+    }, [navigation]);
+  
 
     if (isOffline) {
         return <OfflinePage />;
@@ -179,21 +235,58 @@ const Discover = () => {
                 removeClippedSubviews={true}
             />
 
-            <Text variant="titleLarge" style={styles.sectionTitle}>Trending Videos</Text>
+
+
+
+            {artists.length > 0 && (
+                <>
+                    <Text variant="titleLarge" style={styles.sectionTitle}>Trending Artists</Text>
+                    <FlatList
+                        horizontal
+                        data={artists}
+                        keyExtractor={(item) => item.browseId}
+                        renderItem={({ item }) => (
+                            <Card style={[styles.artistCard, { backgroundColor: theme.colors.elevation.level1 }]}
+                        onPress={()=>handleArtistPress(item.browseId)}
+                        >
+                                <Image
+                                    source={{ uri: item.thumbnails[item.thumbnails.length - 1]?.url }}
+                                    style={styles.artistThumbnail}
+                                    resizeMode="cover"
+                                />
+                                <Card.Content>
+                                    <Text numberOfLines={1} style={{ color: theme.colors.onSurface }}>
+                                        {item.title}
+                                    </Text>
+                                </Card.Content>
+                            </Card>
+                        )}
+                        
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingVertical: 6 }}
+                        initialNumToRender={5}
+                        windowSize={5}
+                        maxToRenderPerBatch={5}
+                        removeClippedSubviews={true}
+                    />
+                </>
+            )}
+            <Text variant="titleLarge" style={styles.sectionTitle}>Trending</Text>
+
         </View>
     );
 
+
     return (
         <FlatList
-            data={videos}
-            keyExtractor={(item) => item.videoId}
+            data={playlists}
+            keyExtractor={(item) => item.playlistId}
             numColumns={numColumns}
             renderItem={({ item }) => (
                 <View style={{ width: itemWidth }}>
-                    <VideoCard
-                        video={item}
-                        onPress={handleVideoPress}
-                        onLongPress={handleLongVideoPress}
+                    <PlaylistCard
+                        playlist={item}
+                        onPress={handlePlaylistPress}
                     />
                 </View>
             )}
@@ -223,6 +316,19 @@ const Discover = () => {
 };
 
 const styles = StyleSheet.create({
+    artistCard: {
+        width: 150,
+        marginRight: 12,
+        borderRadius: 10,
+        overflow: "hidden",
+        alignItems: "center",
+    },
+    artistThumbnail: {
+        width: 150,
+        height: 150,
+        borderRadius: 5,
+    },
+
     contentContainer: {
         paddingBottom: 48,
     },

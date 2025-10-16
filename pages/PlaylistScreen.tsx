@@ -26,7 +26,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 interface Playlist {
     id: string | null;
     title: string;
-    author?: string;
+    author?:{
+        name:string;
+        id:string;
+    }
     thumbnails?: { url: string }[];
     description?: string;
     tracks: {
@@ -170,7 +173,7 @@ const PlaylistScreen = () => {
             const res = await PythonModule.getPlaylist(playlistId);
             const data = JSON.parse(res);
             setPlaylist(data);
-            // console.log(data)
+            console.log(data)
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 300,
@@ -328,7 +331,7 @@ const PlaylistScreen = () => {
                                     variant="bodyMedium"
                                     style={{ color: theme.colors.onSurfaceVariant }}
                                 >
-                                    By {playlist.author}
+                                    By {playlist.author.name}
                                 </Text>
                             )}
                             {playlist.description && (
